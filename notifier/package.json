@@ -1,0 +1,10 @@
+{
+  "name": "makeline-notifier",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sends quiz push notifications from GitHub Actions. Carries no build data.",
+  "type": "module",
+  "dependencies": {
+    "web-push": "3.6.7"
+  }
+}

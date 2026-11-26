@@ -1,0 +1,12 @@
+# The real training data must NEVER be committed or deployed.
+# It lives only on your phone and is loaded into the app from the Files app.
+builds.json
+**/builds.json
+*builds*.json
+!tests/fixtures/sample-builds.json
+
+# Local tooling output
+node_modules/
+test-results/
+tests/e2e/screenshots/
+.DS_Store
