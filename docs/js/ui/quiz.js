@@ -1,7 +1,7 @@
 // Quiz sessions and the renderers for each kind of question.
 import { getData, getProgress, recordAnswer } from '../store.js';
 import { buildOrder, layerTitle, parseAmountInput, sameAmount, shortSizeName, steps, unitWord, formatAmount } from '../data.js';
-import { makeQuestion, modeTitle, pizzaById, pizzaItems } from '../questions.js';
+import { makeQuestion, modeTitle, pizzaById, pizzaItems, countFor } from '../questions.js';
 import { buildSession, weakSpots, requeue, dayIndex } from '../srs.js';
 import { checkOrder, checkPicks } from '../order.js';
 import { buildNotifyQueue } from '../notify.js';
@@ -21,7 +21,8 @@ export function renderQuiz(mode, pizzaId) {
   const today = dayIndex();
   const items = state.items();
   let list;
-  let title = modeTitle(mode);
+  const filters = state.filters();
+  let title = modeTitle(mode, filters);
   let exit = '#/';
   if (mode === 'weak') {
     list = weakSpots(items, progress);
@@ -30,9 +31,9 @@ export function renderQuiz(mode, pizzaId) {
     list = buildSession(items, progress, today);
   } else if (pizzaId) {
     const p = pizzaById(data, pizzaId);
-    list = shuffle(pizzaItems(data, pizzaId, mode));
+    list = shuffle(pizzaItems(data, pizzaId, mode, { grams: filters.grams }));
     exit = `#/pizza/${encodeURIComponent(pizzaId)}`;
-    if (p) title = `${modeTitle(mode)} · ${p.code}`;
+    if (p) title = `${modeTitle(mode, filters)} · ${p.code}`;
   } else if (['flash', 'build', 'portions', 'codes', 'rules'].includes(mode)) {
     list = buildSession(items.filter((it) => it.mode === mode), progress, today);
   } else {
@@ -96,7 +97,8 @@ function show(s) {
   const data = getData();
   const entry = s.queue[s.pos];
   if (!entry) { summary(s); return; }
-  const q = makeQuestion(entry.item, data, { filters: state.filters() });
+  const known = getProgress()[entry.item.key];
+  const q = makeQuestion(entry.item, data, { filters: state.filters(), box: known ? known.box : 0 });
   if (!q || !RENDER[q.kind]) { s.pos++; show(s); return; }
 
   const footer = el('div', { class: 'foot-row' });
@@ -143,7 +145,7 @@ function finish(s, entry, q, correct, extra) {
 }
 
 function answerText(q) {
-  if (q.kind === 'mc') return q.answer;
+  if (q.kind === 'mc' || q.kind === 'type' || q.kind === 'tf') return q.answer;
   if (q.kind === 'flip') return q.back;
   if (q.kind === 'multi') return q.options.filter((o) => o.correct).map((o) => o.label).join(', ');
   return null;
@@ -188,7 +190,7 @@ function summary(s) {
 }
 
 function missedPrompt(q) {
-  if (q.kind === 'mc') return `${q.subject ? `${q.subject.name || q.subject.code}: ` : ''}${q.ask}`;
+  if (q.kind === 'mc' || q.kind === 'type' || q.kind === 'tf') return `${q.subject ? `${q.subject.name || q.subject.code}: ` : ''}${q.ask}`;
   if (q.kind === 'flip') return q.front;
   if (q.kind === 'multi') return q.prompt;
   if (q.kind === 'build') return 'Build it';
@@ -203,11 +205,11 @@ function subjectNode(q) {
   return el('div', { class: 'subject' }, codePill(q.subject.code), el('span', { text: q.subject.name }));
 }
 
-function feedbackNode(correct, answer, notes = [], flags = []) {
+function feedbackNode(correct, answer, notes = [], flags = [], rightText = null) {
   return el('div', { class: `feedback ${correct ? 'fb-right' : 'fb-wrong'}`, role: 'status' },
     el('div', { class: 'fb-head' },
       el('span', { class: 'fb-mark', 'aria-hidden': 'true', text: correct ? '✓' : '✗' }),
-      el('span', { text: correct ? 'Right' : 'The answer is ' }),
+      el('span', { text: correct ? (rightText || 'Right') : answer ? 'The answer is ' : 'Not quite' }),
       !correct && answer ? el('strong', { class: 'fb-answer', text: answer }) : null),
     notes.map((n) => noteLine(n)),
     flags.map((f) => flagBox(f)));
@@ -248,8 +250,71 @@ function renderMc(q, ctx) {
   }
   opts.append(...buttons);
   return [
-    el('div', { class: 'q-top' }, contextLine(ctx.data, q.context), subjectNode(q), el('p', { class: 'ask', text: q.ask }), feedback),
+    el('div', { class: 'q-top' }, contextLine(ctx.data, q.context), quoteNode(q), subjectNode(q), el('p', { class: 'ask', text: q.ask }), feedback),
     opts,
+  ];
+}
+
+function quoteNode(q) {
+  return q.quote ? el('blockquote', { class: 'quote', text: q.quote }) : null;
+}
+
+/** Type the answer: no options to recognise. Numbers use the number keypad. */
+function renderType(q, ctx) {
+  const feedback = el('div', { class: 'fb-slot', 'aria-live': 'polite' });
+  const input = el('input', {
+    class: `type-input${q.numeric ? '' : ' type-text'}`, type: 'text', id: 'type-answer',
+    inputmode: q.numeric ? 'decimal' : 'text', autocomplete: 'off', autocorrect: 'off', autocapitalize: q.numeric ? 'off' : 'characters',
+    spellcheck: 'false', enterkeyhint: 'done', 'aria-label': 'Your answer',
+  });
+  let answered = false;
+  const check = () => {
+    if (answered) return;
+    const raw = input.value.trim();
+    if (!raw) { input.focus(); return; }
+    answered = true;
+    const ok = q.numeric ? sameAmount(parseAmountInput(raw), q.value) : raw.toLowerCase() === String(q.value).toLowerCase();
+    input.disabled = true;
+    input.classList.add(ok ? 'type-right' : 'type-wrong');
+    checkBtn.remove();
+    feedback.append(feedbackNode(ok, q.answer, q.notes, q.flags));
+    ctx.done(ok);
+    ctx.footer.append(ctx.nextButton());
+  };
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') check(); });
+  const checkBtn = el('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: check }, 'Check');
+  return [
+    el('div', { class: 'q-top' }, contextLine(ctx.data, q.context), quoteNode(q), subjectNode(q), el('p', { class: 'ask', text: q.ask })),
+    el('div', { class: 'type-row' }, input, q.unit ? el('span', { class: 'type-unit', text: q.unit }) : null),
+    checkBtn,
+    feedback,
+  ];
+}
+
+/** "Right or wrong?" about one claim. */
+function renderTf(q, ctx) {
+  const feedback = el('div', { class: 'fb-slot', 'aria-live': 'polite' });
+  let answered = false;
+  const pick = (saysRight, btn) => {
+    if (answered) return;
+    answered = true;
+    const ok = saysRight === q.claimTrue;
+    yes.disabled = true;
+    no.disabled = true;
+    btn.classList.add(ok ? 'opt-right' : 'opt-wrong');
+    claim.classList.add(q.claimTrue ? 'claim-true' : 'claim-false');
+    feedback.append(feedbackNode(ok, q.claimTrue ? null : q.answer, q.notes, q.flags, q.claimTrue ? 'Yes, that one’s right' : null));
+    ctx.done(ok);
+    ctx.footer.append(ctx.nextButton());
+    if (ok && !q.notes.length && !q.flags.length && !ctx.isLast()) ctx.autoNext();
+  };
+  const yes = el('button', { type: 'button', class: 'opt tf-btn', onclick: () => pick(true, yes) }, '✓ Right');
+  const no = el('button', { type: 'button', class: 'opt tf-btn', onclick: () => pick(false, no) }, '✗ Wrong');
+  const claim = el('div', { class: `claim${q.mono ? ' mono' : ''}`, text: q.claim });
+  return [
+    el('div', { class: 'q-top' }, contextLine(ctx.data, q.context), quoteNode(q), subjectNode(q), el('p', { class: 'ask', text: q.ask }), claim,
+      el('p', { class: 'muted', text: 'Is that right?' }), feedback),
+    el('div', { class: 'options options-grid' }, yes, no),
   ];
 }
 
@@ -279,7 +344,7 @@ function renderFlash(q, ctx) {
   function reveal() {
     back.hidden = false;
     front.classList.add('flipped');
-    append(back, [buildView(data, pizza, q.size), pizzaInfo(pizza, { facts: false })]);
+    append(back, [buildView(data, pizza, q.size, { grams: state.filters().grams }), pizzaInfo(pizza, { facts: false })]);
     gradeButtons(ctx, (ok) => { ctx.done(ok); ctx.next(); });
     back.scrollIntoView({ block: 'start' });
   }
@@ -299,7 +364,7 @@ function renderMulti(q, ctx) {
         b.classList.toggle('on', chosen.has(o.id));
         b.setAttribute('aria-pressed', String(chosen.has(o.id)));
       },
-    }, el('span', { class: 'pick-name', text: o.label }), codePill(o.code));
+    }, o.size ? sizeBadge(ctx.data, o.size) : null, el('span', { class: 'pick-name', text: o.label }), codePill(o.code));
     return b;
   });
   const check = () => {
@@ -313,7 +378,7 @@ function renderMulti(q, ctx) {
       else if (!o.correct && picked) { b.classList.add('pick-wrong'); ok = false; }
       else b.classList.add('pick-dim');
     });
-    feedback.append(feedbackNode(ok, q.options.filter((o) => o.correct).map((o) => o.label).join(', ')));
+    feedback.append(feedbackNode(ok, q.options.filter((o) => o.correct).map((o) => o.label).join(', '), q.notes, q.flags));
     ctx.done(ok);
     clear(ctx.footer);
     ctx.footer.append(ctx.nextButton());
@@ -392,45 +457,61 @@ function renderBuild(q, ctx) {
       missing.length ? el('p', { class: 'missing' }, el('strong', { text: 'Missed: ' }), missing.map((l) => l.name).join(', ')) : null,
       el('h3', { text: ordered ? 'Correct order' : 'What goes on' }),
       orderList(pizza, ordered)]);
-    ctx.footer.append(el('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: amountsPhase }, 'Next: portions'));
+    const asks = countAsks();
+    ctx.footer.append(asks.length
+      ? el('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: amountsPhase }, q.grams ? 'Next: portions' : 'Next: counts')
+      : el('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: () => reveal(new Map()) }, 'See the build'));
     root.scrollIntoView({ block: 'start' });
+  }
+
+  /** Which layers to ask a number for: all (with grams), or per slice / counts only. */
+  function countAsks() {
+    return buildOrder(pizza)
+      .map((i) => ({ i, ask: countFor(pizza.layers[i], size, q.grams) }))
+      .filter((a) => a.ask);
+  }
+
+  function askUnit(ask) {
+    return ask.kind === 'perslice' ? 'per slice' : ask.unit === 'g' ? 'g' : unitWord(ask.unit, 2);
   }
 
   function amountsPhase() {
     clear(root);
     clear(ctx.footer);
     const inputs = new Map();
-    const rows = buildOrder(pizza).map((i) => {
-      const layer = pizza.layers[i];
+    const rows = countAsks().map(({ i, ask }) => {
       const id = `amt-${i}`;
       const input = el('input', {
         id, class: 'amt-input', type: 'text', inputmode: 'decimal', autocomplete: 'off', autocorrect: 'off',
-        spellcheck: 'false', enterkeyhint: 'next', 'aria-label': `${layerTitle(pizza, i)}, ${unitWord(layer.unit, 2)}`,
+        spellcheck: 'false', enterkeyhint: 'next', 'aria-label': `${layerTitle(pizza, i)}, ${askUnit(ask)}`,
       });
-      inputs.set(i, input);
+      inputs.set(i, { input, ask });
       return el('div', { class: 'amt-row' },
-        el('label', { for: id, class: 'amt-label' }, codePill(layer.code), el('span', { text: layerTitle(pizza, i) })),
-        el('div', { class: 'amt-field' }, input, el('span', { class: 'amt-unit', text: unitWord(layer.unit, 2) })));
+        el('label', { for: id, class: 'amt-label' }, codePill(pizza.layers[i].code), el('span', { text: layerTitle(pizza, i) })),
+        el('div', { class: 'amt-field' }, input, el('span', { class: `amt-unit${ask.kind === 'perslice' ? ' amt-unit-ps' : ''}`, text: askUnit(ask) })));
     });
-    const checkBtn = el('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: () => reveal(inputs) }, 'Check portions');
+    const checkBtn = el('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: () => reveal(inputs) }, q.grams ? 'Check portions' : 'Check counts');
     root.append(head(),
-      el('p', { class: 'ask' }, 'Type each portion for a ', el('strong', { text: shortSizeName(data, size) }), '.'),
+      q.grams
+        ? el('p', { class: 'ask' }, 'Type each portion for a ', el('strong', { text: shortSizeName(data, size) }), '.')
+        : el('p', { class: 'ask' }, 'How many on a ', el('strong', { text: shortSizeName(data, size) }), '? Per slice where it says so, otherwise the total.'),
       el('div', { class: 'amt-form' }, rows),
       checkBtn);
-    setTimeout(() => { const first = inputs.values().next().value; if (first) first.focus({ preventScroll: true }); }, 50);
+    setTimeout(() => { const first = inputs.values().next().value; if (first) first.input.focus({ preventScroll: true }); }, 50);
   }
 
   function reveal(inputs) {
     const marks = new Map();
     const portions = [];
     let amountsOk = true;
-    for (const [i, input] of inputs) {
-      const layer = pizza.layers[i];
+    for (const [i, { input, ask }] of inputs) {
       const got = parseAmountInput(input.value);
-      const ok = sameAmount(got, layer.amounts[size]);
+      const ok = sameAmount(got, ask.value);
       if (!ok) amountsOk = false;
-      portions.push({ key: `portion:${pizza.id}:${size}:${i}`, correct: ok });
-      marks.set(i, ok ? { ok: true } : { bad: true, yours: input.value.trim() ? formatAmount(got, layer.unit).replace(/^\?.*/, input.value.trim()) : '' });
+      portions.push({ key: `${ask.kind === 'perslice' ? 'perslice' : 'portion'}:${pizza.id}:${size}:${i}`, correct: ok });
+      const typed = input.value.trim();
+      const yours = !typed ? '' : Number.isNaN(got) ? typed : ask.kind === 'perslice' ? `${typed} per slice` : formatAmount(got, ask.unit);
+      marks.set(i, ok ? { ok: true } : { bad: true, yours });
     }
     for (const m of orderResult.marks) {
       if (!m.ok && m.reason === 'order' && m.index !== undefined) {
@@ -447,9 +528,9 @@ function renderBuild(q, ctx) {
       feedbackNode(correct, null),
       el('div', { class: 'result-chips' },
         el('span', { class: `rchip ${orderResult.correct ? 'ok' : 'bad'}`, text: `${ordered ? 'Order' : 'Toppings'} ${orderResult.correct ? '✓' : '✗'}` }),
-        el('span', { class: `rchip ${amountsOk ? 'ok' : 'bad'}`, text: `Portions ${right}/${portions.length}` })),
+        portions.length ? el('span', { class: `rchip ${amountsOk ? 'ok' : 'bad'}`, text: `${q.grams ? 'Portions' : 'Counts'} ${right}/${portions.length}` }) : null),
       decoys.length ? el('p', { class: 'missing' }, el('strong', { text: "Doesn't go on: " }), decoys.map((d) => d.name).join(', ')) : null,
-      buildView(data, pizza, size, { marks }),
+      buildView(data, pizza, size, { marks, grams: q.grams }),
       pizzaInfo(pizza, { facts: false })]);
     ctx.done(correct, { portions });
     ctx.footer.append(ctx.nextButton());
@@ -475,4 +556,4 @@ function orderList(pizza, ordered) {
     st.stage === 'postbake' ? el('span', { class: 'tag-post', text: 'after the bake' }) : null)));
 }
 
-const RENDER = { mc: renderMc, flip: renderFlip, flash: renderFlash, multi: renderMulti, build: renderBuild };
+const RENDER = { mc: renderMc, type: renderType, tf: renderTf, flip: renderFlip, flash: renderFlash, multi: renderMulti, build: renderBuild };

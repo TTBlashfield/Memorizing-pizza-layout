@@ -21,9 +21,16 @@ your progress. Push messages carry no build data either: your phone picks the qu
   and **Weak spots**.
 - **Browse**: search, pizza pages with a size switcher, numbered build steps, "After the bake",
   base, placement, notes, facts and ⚠ flags.
-- **Modes**: Flashcards · Build it (tap the order, type the portions) · Quick-fire portions ·
-  Codes (both ways) · Placement & rules (per slice, slices per size, drizzles before or after
-  the bake, extra cheese, facts).
+- **Modes**: Flashcards · Build it (tap the order, then the counts) · Per slice & counts ·
+  Codes (both ways) · Placement & rules (what goes on next, odd one out, placement both ways,
+  slices per size, drizzles before or after the bake, what goes on after the bake, extra
+  cheese, which sizes a range comes in, facts).
+- **Grams are off by default.** The drills are about per-slice counts (e.g. pepperoni per
+  slice), counts where the card has no per-slice figure (bacon slices, meatball pieces, drizzle
+  lines), order and placement. The **Grams** chip on Home brings gram amounts back.
+- **Varied formats** so you can't just recognise the answer: each time a question comes up
+  it may be multiple choice, typed on the number keypad, or "right or wrong?". Questions you
+  know lean towards typing; new or missed ones lean towards multiple choice.
 - **Spaced repetition**: Leitner boxes 1–5, due again after 0 / 1 / 3 / 7 / 14 days. Misses go
   back to box 1 and come round again in the same session. Progress is keyed by stable IDs, so
   it survives re-importing an updated `builds.json`.

@@ -474,3 +474,23 @@ code { font-family: var(--mono); font-size: 0.9em; background: var(--surface-2);
 .hour.taken:not(.on) { opacity: 0.35; }
 .sched-ok { color: var(--right); font-weight: 650; }
 .sched-warn { color: var(--warn-fg); background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 10px; padding: 8px 10px; font-weight: 600; }
+.filter-hint { align-self: center; font-size: 0.85rem; color: var(--muted); }
+
+/* type it / right or wrong */
+.quote { margin: 0; padding: 12px 14px; border-left: 4px solid var(--accent); background: var(--surface); border-radius: 0 12px 12px 0; font-size: 1.05rem; font-weight: 600; }
+.type-row { display: flex; align-items: center; gap: 10px; margin-top: auto; }
+.type-input {
+  flex: 1; min-width: 0; min-height: 64px; padding: 8px 14px; border-radius: 14px; border: 2px solid var(--border);
+  background: var(--surface); font-size: 2rem; font-weight: 800; font-variant-numeric: tabular-nums; text-align: center;
+}
+.type-input.type-text { font-family: var(--mono); text-transform: uppercase; }
+.type-input:focus { outline: none; border-color: var(--accent); }
+.type-right { border-color: var(--right); background: var(--right-bg); }
+.type-wrong { border-color: var(--wrong); background: var(--wrong-bg); }
+.type-unit { flex: none; max-width: 40%; font-size: 1.05rem; font-weight: 700; color: var(--muted); }
+.claim { font-size: 2rem; font-weight: 800; padding: 14px 16px; border-radius: 14px; background: var(--surface); border: 2px dashed var(--border); overflow-wrap: anywhere; }
+.claim.mono { font-family: var(--mono); }
+.claim-true { border: 2px solid var(--right); }
+.claim-false { border: 2px solid var(--wrong); text-decoration: line-through; text-decoration-color: var(--wrong); }
+.tf-btn { font-size: 1.25rem; }
+.amt-unit-ps { width: 64px; }

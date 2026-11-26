@@ -89,6 +89,7 @@ export function notificationText(item, question, data) {
       if (q.subject && q.subject.big && q.subject.code) {
         return { title, body: `${q.subject.code}: ${lowerFirst(q.ask)} ${TAP}` };
       }
+      if (q.quote) return { title, body: `“${q.quote.length > 110 ? `${q.quote.slice(0, 107)}…` : q.quote}” ${q.ask} ${TAP}` };
       const name = q.subject ? (q.subject.name || q.subject.code) : null;
       return { title, body: name ? `${name}: ${lowerFirst(q.ask)} ${TAP}` : `${q.ask} ${TAP}` };
     }
@@ -123,7 +124,7 @@ export function dueByDay(items, progress, today, days = 21) {
  * Everything the service worker needs to show a notification without the app open.
  * `previous` is the last snapshot (to carry over what was already sent).
  */
-export function buildSnapshot({ data, items, progress, statsDays, now = new Date(), rng = Math.random, previous = null, appVersion = '' }) {
+export function buildSnapshot({ data, items, progress, statsDays, now = new Date(), rng = Math.random, previous = null, appVersion = '', filters = null }) {
   const today = dayIndex(now);
   if (!data) {
     return { v: SNAPSHOT_VERSION, createdAt: now.getTime(), day: today, hasData: false, entries: [], next: 0, dueByDay: {}, activeDays: [], sent: [] };
@@ -132,7 +133,8 @@ export function buildSnapshot({ data, items, progress, statsDays, now = new Date
   const recent = new Set(sent.map((s) => s.key));
   const entries = [];
   for (const it of buildNotifyQueue(items, progress, today, { rng, recent })) {
-    const q = makeQuestion(it, data, { rng });
+    // Notifications always read as a plain question; the app picks the format when you tap.
+    const q = makeQuestion(it, data, { rng, format: 'mc', filters: filters || undefined });
     if (!q) continue;
     const { title, body } = notificationText(it, q, data);
     entries.push({ key: it.key, title, body });

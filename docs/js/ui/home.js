@@ -1,7 +1,7 @@
 // Home: today's progress, filters, mode buttons.
 import { getData, getProgress, getStats, getSettings, updateSettings } from '../store.js';
 import { rangesIn, sizesIn, shortSizeName } from '../data.js';
-import { MODES } from '../questions.js';
+import { modesFor } from '../questions.js';
 import { summarize, weakSpots, computeStreak, dayIndex } from '../srs.js';
 import { percent, plural } from '../util.js';
 import * as state from '../state.js';
@@ -32,7 +32,7 @@ export function renderHome() {
     tile(acc === null ? '–' : `${acc}%`, accLabel, t.answered ? `${t.answered} answered` : null));
 
   const weakCount = weakSpots(items, progress, { limit: 999 }).length;
-  const modeButtons = MODES.map((m) => {
+  const modeButtons = modesFor(state.filters()).map((m) => {
     const modeItems = items.filter((it) => it.mode === m.id);
     const s = summarize(modeItems, progress, today);
     const badge = s.due ? `${s.due} due` : s.fresh ? `${s.fresh} new` : modeItems.length ? 'all done' : 'none';
@@ -93,7 +93,19 @@ function filtersCard(data) {
       el('div', { class: 'chips' }, sizes.map((s) => el('button', {
         type: 'button', class: `chip chip-size chip-${s}${f.sizes.includes(s) ? ' on' : ''}`, 'aria-pressed': String(f.sizes.includes(s)),
         'aria-label': shortSizeName(data, s), onclick: () => toggle('sizes', s, sizes),
-      }, sizeBadge(data, s), el('span', { class: 'chip-sz-name', text: shortSizeName(data, s) }))))));
+      }, sizeBadge(data, s), el('span', { class: 'chip-sz-name', text: shortSizeName(data, s) }))))),
+    el('div', { class: 'filter-row' },
+      el('span', { class: 'filter-label', text: 'Amounts' }),
+      el('div', { class: 'chips' },
+        el('button', {
+          type: 'button', class: `chip${f.grams ? ' on' : ''}`, 'aria-pressed': String(f.grams),
+          onclick: () => {
+            updateSettings({ showGrams: !f.grams });
+            state.hooks.settingsChanged();
+            renderHome();
+          },
+        }, 'Grams'),
+        el('span', { class: 'filter-hint', text: f.grams ? 'Asking grams too' : 'Per slice & counts only' }))));
 }
 
 function installHint() {

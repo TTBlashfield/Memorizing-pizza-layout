@@ -73,11 +73,11 @@ test('recently sent questions go to the back', () => {
 
 test('notification text comes from the file and looks like the spec', () => {
   const it = { key: 'portion:T1:L:2', kind: 'portion', pizzaId: 'T1', size: 'L', layerIndex: 2, mode: 'portions' };
-  const t = notificationText(it, makeQuestion(it, data), data);
+  const t = notificationText(it, makeQuestion(it, data, { format: 'mc' }), data);
   assert.equal(t.title, 'Large Â· Test Feast Supreme Deluxe');
   assert.equal(t.body, 'Pepperoni: how many slices? Tap to answer');
   const code = { key: 'code-topping:Zz', kind: 'code-topping', code: 'Zz', mode: 'codes' };
-  assert.equal(notificationText(code, makeQuestion(code, data), data).body, "Zz: what's this topping? Tap to answer");
+  assert.equal(notificationText(code, makeQuestion(code, data, { format: 'mc' }), data).body, "Zz: what's this topping? Tap to answer");
 });
 
 test('due counts for the coming days', () => {
@@ -108,7 +108,7 @@ test('the snapshot holds ~30 entries with keys, titles and bodies, and no data â
 test('notifications never give the answer away', () => {
   const items = buildItems(data, ALL);
   for (const [n, it] of items.entries()) {
-    const q = makeQuestion(it, data, { rng: seededRng(n + 1) });
+    const q = makeQuestion(it, data, { format: 'mc', rng: seededRng(n + 1) });
     if (!q || q.kind !== 'mc') continue;
     const { title, body } = notificationText(it, q, data);
     const text = `${title} ${body}`;

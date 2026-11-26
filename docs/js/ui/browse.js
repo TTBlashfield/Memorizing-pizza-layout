@@ -67,7 +67,7 @@ export function renderPizza(id, sizeArg) {
       }, sizeBadge(data, s), el('span', { text: shortSizeName(data, s) })));
     }
     clear(holder);
-    holder.append(buildView(data, pizza, size));
+    holder.append(buildView(data, pizza, size, { grams: state.filters().grams }));
   };
   draw();
 

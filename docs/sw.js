@@ -7,7 +7,7 @@
  */
 'use strict';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const SHELL_PREFIX = 'makeline-shell-';
 const SHELL_CACHE = SHELL_PREFIX + VERSION;
 
