@@ -92,8 +92,8 @@ export function checkOrder(pizza, tapped) {
   const keep = longestNonDecreasing(ranks);
   rankPositions.forEach(({ pos, ci }, k) => {
     marks[pos] = keep.has(k)
-      ? { ok: true, reason: 'ok', step: stepMap.get(ci) }
-      : { ok: false, reason: 'order', step: stepMap.get(ci) };
+      ? { ok: true, reason: 'ok', step: stepMap.get(ci), index: ci }
+      : { ok: false, reason: 'order', step: stepMap.get(ci), index: ci };
   });
 
   const used = new Set(canon.filter((c) => c !== null));
@@ -111,7 +111,10 @@ export function checkPicks(pizza, tapped) {
   let k = 0;
   for (const chip of tapped) {
     if (chip.kind !== 'layer') marks.push({ ok: false, reason: 'decoy' });
-    else marks.push(canon[k++] === null ? { ok: false, reason: 'extra' } : { ok: true, reason: 'ok' });
+    else {
+      const ci = canon[k++];
+      marks.push(ci === null ? { ok: false, reason: 'extra' } : { ok: true, reason: 'ok', index: ci });
+    }
   }
   const used = new Set(canon.filter((c) => c !== null));
   const missing = buildOrder(pizza).filter((i) => !used.has(i));

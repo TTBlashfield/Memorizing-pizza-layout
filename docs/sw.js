@@ -27,6 +27,7 @@ const SHELL_FILES = [
   'js/order.js',
   'js/questions.js',
   'js/srs.js',
+  'js/state.js',
   'js/store.js',
   'js/util.js',
   'js/version.js',
