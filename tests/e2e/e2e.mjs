@@ -281,12 +281,25 @@ async function run() {
     await page.getByText(`${data.pizzas.length} pizza`).first().waitFor();
     await page.locator('#notifications .checklist').waitFor();
     assert.ok(await page.getByText('Add to Home Screen first').count() > 0, 'Safari tab shows "Add to Home Screen first"');
+    // Notification times are picked in the app and remembered.
+    await page.getByRole('button', { name: 'Quiz at 12:00' }).click();
+    await page.getByRole('button', { name: 'Quiz at 21:00' }).click(); // the summary's hour: refused
+    await page.waitForTimeout(400);
+    await page.reload();
+    await page.locator('#notifications .hours').first().waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Quiz at 12:00' }).getAttribute('aria-pressed'), 'true', 'picked time remembered');
+    assert.equal(await page.getByRole('button', { name: 'Quiz at 21:00' }).getAttribute('aria-pressed'), 'false', 'one notification per hour');
+    assert.match(await page.locator('#notifications .schedule').innerText(), /10:00, 12:00, 13:00, 16:00, 19:00 · Summary: 21:00/);
+    await page.locator('#notifications .schedule').scrollIntoViewIfNeeded();
+    await shot('12b-times');
+    await page.getByRole('button', { name: 'Quiz at 12:00' }).click();
+    await page.locator('#notifications').scrollIntoViewIfNeeded();
     await shot('12-settings');
     const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export progress' }).click()]);
     const exported = JSON.parse(readFileSync(await download.path(), 'utf8'));
     assert.equal(exported.schema, 'makeline-progress/v1');
     assert.ok(Object.keys(exported.progress).length > 10);
-    log(`settings: count shown, "Add to Home Screen first" in a Safari tab, progress exported (${Object.keys(exported.progress).length} keys)`);
+    log(`settings: count shown, "Add to Home Screen first" in a Safari tab, notification times picked in-app and remembered, progress exported (${Object.keys(exported.progress).length} keys)`);
 
     // Notification queue on the device, and the real push code path.
     const snap = await page.evaluate(() => new Promise((res, rej) => {

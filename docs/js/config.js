@@ -7,3 +7,8 @@ export const VAPID_PUBLIC_KEY = 'BCEFqNILzX1-BCfS0hIO0N2PWeuc50DZ2DxjtnEN0Xqj3l8
 
 // How many upcoming notification questions to prepare on the device.
 export const NOTIFY_QUEUE_SIZE = 30;
+
+// Default notification times (UK time). You change them in the app (Settings → Notifications);
+// they travel to GitHub inside the PUSH_SUBSCRIPTION secret. Keep in step with
+// notifier/default-schedule.json (a unit test checks).
+export const DEFAULT_SCHEDULE = { timeZone: 'Europe/London', quiz: ['10:00', '13:00', '16:00', '19:00'], summary: '21:00' };

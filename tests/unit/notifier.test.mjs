@@ -4,13 +4,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findDueSlot, parseSchedule, zonedParts, describeSchedule } from '../../notifier/schedule.mjs';
 import { buildPayload, pagesUrl, DECLARATIVE_MAGIC } from '../../notifier/payload.mjs';
+import { parseSecret, loadSchedule, publicKeyFor } from '../../notifier/send.mjs';
 import { ROOT, fixtureText } from './helpers.mjs';
 
 const schedule = parseSchedule({ timeZone: 'Europe/London', quiz: ['10:00', '13:00', '16:00', '19:00'], summary: '21:00' });
 const at = (iso) => findDueSlot(new Date(iso), schedule);
 
-test('the shipped schedule file is valid', () => {
-  const s = parseSchedule(JSON.parse(readFileSync(join(ROOT, 'docs', 'notify-schedule.json'), 'utf8')));
+test('the shipped default schedule is valid', () => {
+  const s = parseSchedule(JSON.parse(readFileSync(join(ROOT, 'notifier', 'default-schedule.json'), 'utf8')));
   assert.equal(describeSchedule(s), 'Quiz at 10:00, 13:00, 16:00, 19:00 · Summary at 21:00 (Europe/London)');
 });
 
@@ -109,4 +110,37 @@ test('payload refuses non-https app URLs', () => {
 test('pages URL from the repo name', () => {
   assert.equal(pagesUrl('TTBlashfield/MyRepo'), 'https://ttblashfield.github.io/MyRepo/');
   assert.equal(pagesUrl('Someone/someone.github.io'), 'https://someone.github.io/');
+});
+
+const SUB = { endpoint: 'https://web.push.apple.com/abc', keys: { p256dh: 'BPx', auth: 'au' } };
+
+test('PUSH_SUBSCRIPTION: what the app copies (subscription + times) is read correctly', () => {
+  const text = JSON.stringify({ subscription: SUB, schedule: { timeZone: 'Europe/London', quiz: ['08:00', '12:00'], summary: null } });
+  const { subscription, schedule } = parseSecret(text);
+  assert.equal(subscription.endpoint, SUB.endpoint);
+  const loaded = loadSchedule(text);
+  assert.match(loaded.source, /app/);
+  assert.equal(describeSchedule(loaded.schedule), 'Quiz at 08:00, 12:00 (Europe/London)');
+  assert.equal(findDueSlot(new Date('2026-07-01T07:17:00Z'), loaded.schedule).time, '08:00', '07:17 UTC is 08:17 BST');
+});
+
+test('PUSH_SUBSCRIPTION: a bare subscription uses the default times', () => {
+  const loaded = loadSchedule(JSON.stringify(SUB));
+  assert.match(loaded.source, /default/);
+  assert.equal(loaded.schedule.slots.length, 5);
+  assert.equal(parseSecret(JSON.stringify(SUB)).schedule, null);
+});
+
+test('PUSH_SUBSCRIPTION: missing or broken gives clear errors, schedule falls back to default', () => {
+  assert.throws(() => parseSecret('nope'), /isn't valid JSON/);
+  assert.throws(() => parseSecret('{"subscription":{}}'), /endpoint/);
+  assert.match(loadSchedule('').source, /default/);
+  assert.match(loadSchedule('garbage').source, /default/);
+});
+
+test('the VAPID public key in the app matches its private key format', () => {
+  // A throwaway key pair, to prove the derivation used to catch a wrong VAPID_PRIVATE_KEY works.
+  const priv = Buffer.alloc(32, 7).toString('base64url');
+  const pub = publicKeyFor(priv);
+  assert.equal(Buffer.from(pub, 'base64url').length, 65);
 });

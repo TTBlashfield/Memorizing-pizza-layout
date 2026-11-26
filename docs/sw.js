@@ -47,9 +47,6 @@ const SHELL_FILES = [
   'icons/apple-touch-icon.png',
 ];
 
-// Fetched fresh when online (so schedule edits show up), cached copy when offline.
-const NETWORK_FIRST = ['notify-schedule.json'];
-
 importScripts('sw-push.js');
 
 self.addEventListener('install', (event) => {
@@ -94,21 +91,6 @@ self.addEventListener('fetch', (event) => {
     event.respondWith((async () => {
       const cache = await caches.open(SHELL_CACHE);
       return (await cache.match('index.html')) || fetch(req);
-    })());
-    return;
-  }
-
-  const path = url.pathname.slice(scope.pathname.length);
-  if (NETWORK_FIRST.includes(path)) {
-    event.respondWith((async () => {
-      const cache = await caches.open(SHELL_CACHE);
-      try {
-        const res = await fetch(req, { cache: 'no-store' });
-        if (res.ok) await cache.put(path, res.clone());
-        return res;
-      } catch (e) {
-        return (await cache.match(path)) || Response.error();
-      }
     })());
     return;
   }

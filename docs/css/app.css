@@ -462,3 +462,15 @@ code { font-family: var(--mono); font-size: 0.9em; background: var(--surface-2);
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* notification times */
+.hour-label { font-size: 0.8rem; font-weight: 700; color: var(--muted); margin: 12px 2px 6px; }
+.hours { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; }
+.hour {
+  min-height: 44px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface);
+  font-weight: 650; font-variant-numeric: tabular-nums; cursor: pointer;
+}
+.hour.on { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.hour.taken:not(.on) { opacity: 0.35; }
+.sched-ok { color: var(--right); font-weight: 650; }
+.sched-warn { color: var(--warn-fg); background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 10px; padding: 8px 10px; font-weight: 600; }

@@ -7,7 +7,8 @@
 //
 // Secrets (repo Settings -> Secrets and variables -> Actions):
 //   VAPID_PRIVATE_KEY   the private half of the key pair (never commit it)
-//   PUSH_SUBSCRIPTION   JSON copied from the app (Settings -> Notifications -> Copy)
+//   PUSH_SUBSCRIPTION   JSON copied from the app (Settings -> Notifications -> Copy).
+//                       It also carries your notification times.
 //   VAPID_SUBJECT       optional, e.g. mailto:you@example.com (defaults to the app's URL)
 import { appendFileSync, readFileSync } from 'node:fs';
 import { createECDH } from 'node:crypto';
@@ -17,7 +18,7 @@ import { findDueSlot, parseSchedule, describeSchedule } from './schedule.mjs';
 import { buildPayload, pagesUrl } from './payload.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const SCHEDULE_FILE = join(ROOT, 'docs', 'notify-schedule.json');
+const SCHEDULE_FILE = join(ROOT, 'notifier', 'default-schedule.json');
 const CONFIG_FILE = join(ROOT, 'docs', 'js', 'config.js');
 const EXPIRED_MSG = 'Re-enable notifications in the app and update PUSH_SUBSCRIPTION';
 
@@ -44,17 +45,35 @@ export function publicKeyFor(privateKey) {
   return ecdh.getPublicKey().toString('base64url');
 }
 
-export function parseSubscription(text) {
-  let sub;
+/**
+ * PUSH_SUBSCRIPTION holds what the app's "Copy my push subscription" button copies:
+ *   { "subscription": { endpoint, keys }, "schedule": { timeZone, quiz: [...], summary } }
+ * A bare subscription ({ endpoint, keys }) also works and uses the default schedule.
+ */
+export function parseSecret(text) {
+  let obj;
   try {
-    sub = JSON.parse(text);
+    obj = JSON.parse(text);
   } catch {
     throw new Error('PUSH_SUBSCRIPTION isn\'t valid JSON. Copy it again from the app (Settings → Notifications → Copy my push subscription).');
   }
+  const sub = obj && obj.subscription ? obj.subscription : obj;
   if (!sub || typeof sub.endpoint !== 'string' || !sub.keys || !sub.keys.p256dh || !sub.keys.auth) {
     throw new Error('PUSH_SUBSCRIPTION is missing "endpoint" or "keys". Copy it again from the app.');
   }
-  return sub;
+  return { subscription: sub, schedule: obj && obj.schedule ? obj.schedule : null };
+}
+
+export const parseSubscription = (text) => parseSecret(text).subscription;
+
+/** The schedule from the secret if it has one, else the default file. */
+export function loadSchedule(secretText) {
+  if (secretText && secretText.trim()) {
+    let fromSecret = null;
+    try { fromSecret = parseSecret(secretText).schedule; } catch { /* reported by the send step */ }
+    if (fromSecret) return { schedule: parseSchedule(fromSecret), source: 'your app (PUSH_SUBSCRIPTION)' };
+  }
+  return { schedule: parseSchedule(JSON.parse(readFileSync(SCHEDULE_FILE, 'utf8'))), source: 'the default schedule' };
 }
 
 function check() {
@@ -67,9 +86,9 @@ function check() {
     output('slot_key', `manual-${Date.now()}`);
     return;
   }
-  const schedule = parseSchedule(JSON.parse(readFileSync(SCHEDULE_FILE, 'utf8')));
+  const { schedule, source } = loadSchedule(process.env.PUSH_SUBSCRIPTION || '');
   const slot = findDueSlot(new Date(), schedule);
-  console.log(`Schedule: ${describeSchedule(schedule)}`);
+  console.log(`Schedule from ${source}: ${describeSchedule(schedule)}`);
   if (!slot) {
     console.log('No notification due this hour.');
     output('send', 'false');
@@ -89,7 +108,7 @@ async function send() {
   if (!subText) fail(`The PUSH_SUBSCRIPTION secret is missing. ${EXPIRED_MSG}.`);
 
   let subscription;
-  try { subscription = parseSubscription(subText); } catch (e) { fail(e.message); }
+  try { subscription = parseSecret(subText).subscription; } catch (e) { fail(e.message); }
 
   const publicKey = readPublicKey();
   let derived;

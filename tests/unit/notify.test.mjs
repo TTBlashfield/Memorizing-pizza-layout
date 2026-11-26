@@ -104,3 +104,17 @@ test('the snapshot holds ~30 entries with keys, titles and bodies, and no data â
   assert.equal(empty.hasData, false);
   assert.deepEqual(empty.entries, []);
 });
+
+test('notifications never give the answer away', () => {
+  const items = buildItems(data, ALL);
+  for (const [n, it] of items.entries()) {
+    const q = makeQuestion(it, data, { rng: seededRng(n + 1) });
+    if (!q || q.kind !== 'mc') continue;
+    const { title, body } = notificationText(it, q, data);
+    const text = `${title} ${body}`;
+    if (it.kind === 'code-pizza') assert.ok(!text.includes(data.pizzas.find((p) => p.id === it.pizzaId).name), `${it.key}: ${text}`);
+    if (it.kind === 'code-topping') assert.ok(!text.includes(data.toppingCodes[it.code]), `${it.key}: ${text}`);
+    if (it.kind === 'code-topping-rev' || it.kind === 'code-pizza-rev') assert.ok(!new RegExp(`\\b${q.answer}\\b`).test(title), `${it.key}: ${text}`);
+    if (it.kind === 'portion') assert.ok(!text.includes(q.answer), `${it.key}: ${text}`);
+  }
+});

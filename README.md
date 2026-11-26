@@ -35,15 +35,14 @@ your progress. Push messages carry no build data either: your phone picks the qu
 
 iPhone only allows web push for Home Screen apps (iOS 16.4+), and web apps can't schedule
 notifications themselves. So a GitHub Actions workflow (`.github/workflows/quiz-notify.yml`) runs
-every hour at :17 and sends a push when the UK time matches a slot in
-[`docs/notify-schedule.json`](docs/notify-schedule.json):
+every hour at about :17 and sends a push when the UK hour matches one of your times.
 
-```json
-{ "timeZone": "Europe/London", "quiz": ["10:00", "13:00", "16:00", "19:00"], "summary": "21:00" }
-```
-
-Edit that file in GitHub to change the times. Times are on the hour, in UK time, and GMT/BST is
-handled for you. Each hour can have only one notification.
+**Pick your times in the app**: Settings → Notifications → *Your times*. They travel to GitHub
+inside the `PUSH_SUBSCRIPTION` secret (the **Copy my push subscription** button copies your
+subscription *and* your times). If you change times later, the app says so: copy again and paste
+over the secret. GMT/BST is handled for you, and there's one notification per hour at most.
+Without times in the secret, [`notifier/default-schedule.json`](notifier/default-schedule.json)
+is used (quiz at 10:00, 13:00, 16:00, 19:00, and the summary at 21:00).
 
 How it stays private and reliable:
 
@@ -63,7 +62,7 @@ Secrets (repo **Settings → Secrets and variables → Actions**):
 | Secret | What |
 | --- | --- |
 | `VAPID_PRIVATE_KEY` | Private half of the key pair. The public half is in `docs/js/config.js`. |
-| `PUSH_SUBSCRIPTION` | From the app: Settings → Notifications → **Copy my push subscription**. |
+| `PUSH_SUBSCRIPTION` | From the app: Settings → Notifications → **Copy my push subscription** (includes your times). |
 | `VAPID_SUBJECT` | Optional, e.g. `mailto:you@example.com`. Defaults to the app's address. |
 
 If the push service says the subscription has gone (404/410), the run **fails** with "Re-enable

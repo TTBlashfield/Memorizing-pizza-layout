@@ -84,7 +84,8 @@ export function notificationText(item, question, data) {
     case 'build':
       return { title: `${pizzaTitle} (${pizza.code})`, body: 'Build it: tap the toppings in order. Tap to start' };
     case 'mc': {
-      const title = pizzaTitle || (q.context && q.context.label) || 'Makeline';
+      // A label (e.g. "Pizza code") wins over the pizza name, which might be the answer.
+      const title = (q.context && q.context.label) || pizzaTitle || 'Makeline';
       if (q.subject && q.subject.big && q.subject.code) {
         return { title, body: `${q.subject.code}: ${lowerFirst(q.ask)} ${TAP}` };
       }

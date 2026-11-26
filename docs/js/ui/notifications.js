@@ -1,15 +1,19 @@
-// Settings → Notifications: status checklist, turn on/off, copy the push subscription,
-// send a test, and show the schedule.
+// Settings → Notifications: status checklist, your times, turn on/off, copy the push
+// subscription (which carries your times to GitHub), and send a test.
 //
 // iOS rules: web push only works in the Home Screen app (iOS 16.4+), and the permission
 // prompt must come straight from a tap inside the installed app.
-import { VAPID_PUBLIC_KEY } from '../config.js';
+import { VAPID_PUBLIC_KEY, DEFAULT_SCHEDULE } from '../config.js';
 import { kvGet, SNAPSHOT_KEY } from '../db.js';
-import { getPush, setPush } from '../store.js';
+import { getPush, setPush, getSettings, updateSettings } from '../store.js';
 import * as state from '../state.js';
 import { el, clear, toast, isStandalone, isIOS, installSteps } from './dom.js';
 
 const supported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const QUIZ_HOURS = Array.from({ length: 18 }, (_, i) => i + 6); // 06:00–23:00
+const SUMMARY_HOURS = [17, 18, 19, 20, 21, 22, 23];
+const hh = (h) => `${String(h).padStart(2, '0')}:00`;
+const hourOf = (t) => Number(String(t).slice(0, 2));
 
 function keyBytes(base64url) {
   const b64 = base64url.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (base64url.length % 4)) % 4);
@@ -30,6 +34,16 @@ export function repoUrl() {
   return first ? `https://github.com/${m[1]}/${first}` : `https://github.com/${m[1]}/${m[1]}.github.io`;
 }
 
+/** Your times, cleaned: on the hour, one notification per hour, sorted. */
+export function currentSchedule() {
+  const s = getSettings().notifySchedule || DEFAULT_SCHEDULE;
+  const summary = s.summary && /^\d\d:00$/.test(s.summary) ? s.summary : null;
+  const quiz = [...new Set((s.quiz || []).filter((t) => /^\d\d:00$/.test(t) && t !== summary))].sort();
+  return { timeZone: 'Europe/London', quiz, summary };
+}
+
+const scheduleKey = (s) => JSON.stringify({ quiz: s.quiz, summary: s.summary });
+
 async function currentSubscription() {
   if (!supported()) return null;
   const reg = await navigator.serviceWorker.getRegistration();
@@ -38,17 +52,15 @@ async function currentSubscription() {
 
 export function notificationsSection() {
   const sec = el('section', { class: 'card notif', id: 'notifications' });
+  let sub = null;
   draw();
   return sec;
 
   async function draw() {
-    clear(sec);
-    sec.append(el('h2', { text: 'Notifications' }));
     const installed = isStandalone();
     const ok = supported();
     const perm = ok ? Notification.permission : 'unsupported';
-    let sub = null;
-    try { sub = await currentSubscription(); } catch { /* ignore */ }
+    try { sub = await currentSubscription(); } catch { sub = null; }
     const snap = await kvGet(SNAPSHOT_KEY).catch(() => null);
     const queued = snap && snap.hasData ? Math.max(0, snap.entries.length - (snap.next || 0)) : 0;
 
@@ -56,6 +68,8 @@ export function notificationsSection() {
       el('span', { class: 'check-ic', 'aria-hidden': 'true', text: good === true ? '✓' : good === false ? '✗' : '–' }),
       el('span', null, el('strong', { text: label }), detail ? el('span', { class: 'muted', text: ` ${detail}` }) : null));
 
+    clear(sec);
+    sec.append(el('h2', { text: 'Notifications' }));
     sec.append(el('ul', { class: 'checklist' },
       check(installed, 'Installed to Home Screen', installed ? null : '(open Makeline from its icon)'),
       check(ok, 'Push supported', ok ? null : '(needs iOS 16.4 or later, in the installed app)'),
@@ -76,9 +90,9 @@ export function notificationsSection() {
     } else if (!sub) {
       sec.append(el('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: turnOn }, 'Turn on quiz notifications'));
     } else {
-      sec.append(subscribedBlock(sub));
+      sec.append(subscribedBlock());
     }
-    sec.append(await scheduleBlock());
+    sec.append(scheduleEditor());
   }
 
   async function turnOn() {
@@ -92,13 +106,14 @@ export function notificationsSection() {
       }
       const reg = await navigator.serviceWorker.ready;
       const key = keyBytes(VAPID_PUBLIC_KEY);
-      let sub = await reg.pushManager.getSubscription();
-      if (sub && !sameKey(sub.options && sub.options.applicationServerKey, key)) {
-        await sub.unsubscribe();
-        sub = null;
+      let s = await reg.pushManager.getSubscription();
+      if (s && !sameKey(s.options && s.options.applicationServerKey, key)) {
+        await s.unsubscribe();
+        s = null;
       }
-      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
-      await setPush({ enabled: true, subscription: sub.toJSON(), since: Date.now() });
+      if (!s) s = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      await setPush({ enabled: true, subscription: s.toJSON(), since: Date.now() });
+      await updateSettings({ scheduleCopied: null });
       state.hooks.dataChanged();
       toast('Notifications on. Now copy your subscription into GitHub.');
     } catch (e) {
@@ -110,27 +125,36 @@ export function notificationsSection() {
   async function turnOff() {
     if (!confirm('Turn off quiz notifications on this phone?')) return;
     try {
-      const sub = await currentSubscription();
-      if (sub) await sub.unsubscribe();
+      const s = await currentSubscription();
+      if (s) await s.unsubscribe();
     } catch { /* ignore */ }
     await setPush(null);
     toast('Off. Also disable the workflow in GitHub, or its next run will fail.', { ms: 6000 });
     draw();
   }
 
-  function subscribedBlock(sub) {
-    const json = JSON.stringify(sub.toJSON ? sub.toJSON() : sub);
-    const text = el('textarea', { class: 'sub-json', rows: '4', readonly: true, 'aria-label': 'Your push subscription', value: json });
+  /** What "Copy" puts on the clipboard: the subscription plus your times. */
+  function secretText() {
+    return JSON.stringify({ subscription: sub.toJSON ? sub.toJSON() : sub, schedule: currentSchedule() });
+  }
+
+  function subscribedBlock() {
     const repo = repoUrl();
+    const text = el('textarea', { class: 'sub-json', rows: '4', readonly: true, 'aria-label': 'Your push subscription', value: secretText() });
     const copy = async () => {
+      const json = secretText();
+      text.value = json;
       try {
         await navigator.clipboard.writeText(json);
         toast('Copied. Paste it into the PUSH_SUBSCRIPTION secret.');
       } catch {
+        text.closest('details').open = true;
         text.focus();
         text.select();
         toast('Select all and copy the text below.');
       }
+      await updateSettings({ scheduleCopied: scheduleKey(currentSchedule()), scheduleCopiedAt: Date.now() });
+      draw();
     };
     const test = async () => {
       try {
@@ -144,39 +168,62 @@ export function notificationsSection() {
     return el('div', { class: 'subscribed' },
       el('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: copy }, 'Copy my push subscription'),
       el('ol', { class: 'steps-list' },
-        el('li', null, 'Tap ', el('strong', { text: 'Copy my push subscription' }), ' above.'),
+        el('li', null, 'Tap ', el('strong', { text: 'Copy my push subscription' }), ' above. It includes your times.'),
         el('li', null, 'In Safari, open ',
-          repo ? el('a', { href: `${repo}/settings/secrets/actions/new`, target: '_blank', rel: 'noopener', text: 'your repo’s new-secret page' }) : el('strong', { text: 'your repo → Settings → Secrets and variables → Actions → New repository secret' }),
+          repo ? el('a', { href: `${repo}/settings/secrets/actions`, target: '_blank', rel: 'noopener', text: 'your repo’s Actions secrets' }) : el('strong', { text: 'your repo → Settings → Secrets and variables → Actions' }),
           '.'),
-        el('li', null, 'Name it ', el('code', { text: 'PUSH_SUBSCRIPTION' }), ', paste, and tap ', el('strong', { text: 'Add secret' }), '.')),
-      el('details', null, el('summary', { text: 'Show the subscription' }), text),
+        el('li', null, 'Add (or edit) ', el('code', { text: 'PUSH_SUBSCRIPTION' }), ', paste, and save.')),
+      el('details', null, el('summary', { text: 'Show what gets copied' }), text),
       el('div', { class: 'foot-row' },
         el('button', { type: 'button', class: 'btn', onclick: test }, 'Send a test notification'),
         el('button', { type: 'button', class: 'btn btn-quiet', onclick: turnOff }, 'Turn off')));
   }
-}
 
-async function scheduleBlock() {
-  const box = el('div', { class: 'schedule' }, el('h3', { text: 'Your schedule (UK time)' }));
-  try {
-    const res = await fetch('notify-schedule.json', { cache: 'no-store' });
-    const s = await res.json();
-    const quiz = Array.isArray(s.quiz) ? s.quiz : [];
-    box.append(el('ul', { class: 'sched' },
-      el('li', null, el('strong', { text: 'Quiz questions: ' }), quiz.length ? quiz.join(', ') : 'none'),
-      el('li', null, el('strong', { text: 'Evening summary: ' }), s.summary || 'none')));
-  } catch {
-    box.append(el('p', { class: 'muted', text: "Couldn't load the schedule (are you offline?)." }));
+  function scheduleEditor() {
+    const sched = currentSchedule();
+    const settings = getSettings();
+    const quizSet = new Set(sched.quiz.map(hourOf));
+    const summaryHour = sched.summary ? hourOf(sched.summary) : null;
+    const save = async (next) => {
+      await updateSettings({ notifySchedule: { timeZone: 'Europe/London', ...next } });
+      draw();
+    };
+    const toggleQuiz = (h) => {
+      if (h === summaryHour) { toast('That hour has the evening summary. One notification per hour.'); return; }
+      const q = new Set(quizSet);
+      if (q.has(h)) q.delete(h); else q.add(h);
+      save({ quiz: [...q].sort((a, b) => a - b).map(hh), summary: sched.summary });
+    };
+    const setSummary = (h) => {
+      if (h !== null && quizSet.has(h)) { toast('That hour already has a quiz. One notification per hour.'); return; }
+      save({ quiz: sched.quiz, summary: h === null ? null : hh(h) });
+    };
+
+    let status;
+    if (!sub) {
+      status = el('p', { class: 'muted small', text: 'Turn on notifications, then copy your subscription: these times go with it.' });
+    } else if (settings.scheduleCopied === scheduleKey(sched)) {
+      status = el('p', { class: 'sched-ok', text: '✓ These are the times you last copied to GitHub.' });
+    } else {
+      status = el('p', { class: 'sched-warn', text: '⚠ Times changed. Tap “Copy my push subscription” again and paste it over PUSH_SUBSCRIPTION in GitHub.' });
+    }
+
+    return el('div', { class: 'schedule' },
+      el('h3', { text: 'Your times (UK time)' }),
+      el('p', { class: 'muted small', text: `Quiz questions: ${sched.quiz.length ? sched.quiz.join(', ') : 'none'} · Summary: ${sched.summary || 'off'}` }),
+      el('div', { class: 'hour-label', text: 'Quiz questions' }),
+      el('div', { class: 'hours', role: 'group', 'aria-label': 'Quiz notification hours' }, QUIZ_HOURS.map((h) => el('button', {
+        type: 'button', class: `hour${quizSet.has(h) ? ' on' : ''}${h === summaryHour ? ' taken' : ''}`,
+        'aria-pressed': String(quizSet.has(h)), 'aria-label': `Quiz at ${hh(h)}`, onclick: () => toggleQuiz(h),
+      }, hh(h)))),
+      el('div', { class: 'hour-label', text: 'Evening summary' }),
+      el('div', { class: 'hours', role: 'group', 'aria-label': 'Summary hour' },
+        el('button', { type: 'button', class: `hour${summaryHour === null ? ' on' : ''}`, 'aria-pressed': String(summaryHour === null), onclick: () => setSummary(null) }, 'Off'),
+        SUMMARY_HOURS.map((h) => el('button', {
+          type: 'button', class: `hour${summaryHour === h ? ' on' : ''}${quizSet.has(h) ? ' taken' : ''}`,
+          'aria-pressed': String(summaryHour === h), 'aria-label': `Summary at ${hh(h)}`, onclick: () => setSummary(h),
+        }, hh(h)))),
+      status,
+      el('p', { class: 'muted small', text: 'Notifications come within the hour you pick (GitHub runs at about 17 minutes past). Clocks going forward or back are handled for you.' }));
   }
-  const repo = repoUrl();
-  box.append(el('p', { class: 'muted small' }, 'To change the times, edit ',
-    repo ? el('a', { href: `${repo}/edit/main/docs/notify-schedule.json`, target: '_blank', rel: 'noopener', text: 'docs/notify-schedule.json' }) : el('code', { text: 'docs/notify-schedule.json' }),
-    ' in GitHub. Times are on the hour, UK time, and follow GMT/BST automatically.'));
-  return box;
-}
-
-/** Used by Settings to show a one-line status. */
-export function pushSummary() {
-  const p = getPush();
-  return p && p.enabled ? 'On' : 'Off';
 }

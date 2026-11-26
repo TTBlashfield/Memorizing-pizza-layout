@@ -3,10 +3,11 @@
 # The push carries NO build data: just "quiz" or "summary" plus generic fallback text.
 # Your phone picks the actual question from its own copy of builds.json.
 #
-# Times live in docs/notify-schedule.json (UK time; GMT/BST handled automatically).
+# Times are set in the app (Settings -> Notifications) and travel inside PUSH_SUBSCRIPTION.
+# Without them, notifier/default-schedule.json is used. UK time; GMT/BST handled automatically.
 # Secrets (Settings -> Secrets and variables -> Actions):
 #   VAPID_PRIVATE_KEY   required
-#   PUSH_SUBSCRIPTION   required (copy it from the app: Settings -> Notifications)
+#   PUSH_SUBSCRIPTION   required (copy it from the app: Settings -> Notifications; includes your times)
 #   VAPID_SUBJECT       optional, e.g. mailto:you@example.com (defaults to the app's address)
 name: Quiz notifications
 
@@ -42,7 +43,7 @@ jobs:
         with:
           sparse-checkout: |
             notifier
-            docs
+            docs/js
 
       - uses: actions/setup-node@v4
         with:
@@ -54,6 +55,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_TYPE: ${{ inputs.type }}
+          PUSH_SUBSCRIPTION: ${{ secrets.PUSH_SUBSCRIPTION }}
 
       # Avoid double sends: each slot (date + hour) is remembered in the Actions cache.
       - name: Already sent for this slot?

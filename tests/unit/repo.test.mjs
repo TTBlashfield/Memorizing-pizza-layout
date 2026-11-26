@@ -22,7 +22,7 @@ function shellFiles() {
   return [...block.matchAll(/'([^']+)'/g)].map((m) => m[1]);
 }
 
-const NOT_CACHED = new Set(['sw.js', 'robots.txt', '.nojekyll', 'notify-schedule.json']);
+const NOT_CACHED = new Set(['sw.js', 'robots.txt', '.nojekyll']);
 
 test('every app file is in the offline cache list, and every listed file exists', () => {
   const listed = new Set(shellFiles());
@@ -45,7 +45,7 @@ test('the service worker and app versions match', () => {
 test('no builds file is ever published or committed', () => {
   for (const f of walk(DOCS)) {
     assert.ok(!/builds/i.test(f), `${f} must not be in docs/`);
-    if (f.endsWith('.json')) assert.equal(f, 'notify-schedule.json', `unexpected JSON file ${f} in docs/`);
+    assert.ok(!f.endsWith('.json'), `unexpected JSON file ${f} in docs/ (data must never be published)`);
   }
   let tracked = [];
   try {
@@ -138,4 +138,10 @@ test('the notifier workflow runs hourly at :17 and can be run by hand', () => {
   assert.match(wf, /secrets\.VAPID_PRIVATE_KEY/);
   assert.match(wf, /secrets\.PUSH_SUBSCRIPTION/);
   assert.match(wf, /actions: write/);
+});
+
+test('the app default times match the notifier default', async () => {
+  const { DEFAULT_SCHEDULE } = await import('../../docs/js/config.js');
+  const file = JSON.parse(readFileSync(join(ROOT, 'notifier', 'default-schedule.json'), 'utf8'));
+  assert.deepEqual(DEFAULT_SCHEDULE, file);
 });
