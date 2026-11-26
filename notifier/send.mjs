@@ -132,6 +132,8 @@ async function keepalive() {
   const repo = process.env.GITHUB_REPOSITORY;
   const workflow = process.env.WORKFLOW_FILE || 'quiz-notify.yml';
   if (!token || !repo) { console.log('No token or repo, skipping keepalive.'); return; }
+  // Once a day is plenty (the run at 03:17 UTC).
+  if (!process.env.FORCE_KEEPALIVE && new Date().getUTCHours() !== 3) { console.log('Keepalive runs once a day at 03:17 UTC.'); return; }
   const res = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${workflow}/enable`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },

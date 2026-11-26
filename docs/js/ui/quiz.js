@@ -7,7 +7,7 @@ import { checkOrder, checkPicks } from '../order.js';
 import { buildNotifyQueue } from '../notify.js';
 import { shuffle } from '../util.js';
 import * as state from '../state.js';
-import { el, clear, screen, contextLine, codePill, flagBox, noteLine, sizeBadge } from './dom.js';
+import { el, append, clear, screen, contextLine, codePill, flagBox, noteLine, sizeBadge } from './dom.js';
 import { buildView, pizzaInfo } from './buildview.js';
 
 const MAX_REPEATS = 2; // a missed question comes back up to twice in one session
@@ -279,7 +279,7 @@ function renderFlash(q, ctx) {
   function reveal() {
     back.hidden = false;
     front.classList.add('flipped');
-    back.append(buildView(data, pizza, q.size), pizzaInfo(pizza, { facts: false }));
+    append(back, [buildView(data, pizza, q.size), pizzaInfo(pizza, { facts: false })]);
     gradeButtons(ctx, (ok) => { ctx.done(ok); ctx.next(); });
     back.scrollIntoView({ block: 'start' });
   }
@@ -386,12 +386,12 @@ function renderBuild(q, ctx) {
         why ? el('span', { class: 'why', text: why }) : null));
     });
     const missing = orderResult.missing.map((i) => pizza.layers[i]);
-    root.append(head(),
+    append(root, [head(),
       feedbackNode(orderResult.correct, null),
       el('h3', { text: 'Your build' }), tray,
       missing.length ? el('p', { class: 'missing' }, el('strong', { text: 'Missed: ' }), missing.map((l) => l.name).join(', ')) : null,
       el('h3', { text: ordered ? 'Correct order' : 'What goes on' }),
-      orderList(pizza, ordered));
+      orderList(pizza, ordered)]);
     ctx.footer.append(el('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: amountsPhase }, 'Next: portions'));
     root.scrollIntoView({ block: 'start' });
   }
@@ -443,14 +443,14 @@ function renderBuild(q, ctx) {
     const right = portions.filter((p) => p.correct).length;
     clear(root);
     clear(ctx.footer);
-    root.append(head(),
+    append(root, [head(),
       feedbackNode(correct, null),
       el('div', { class: 'result-chips' },
         el('span', { class: `rchip ${orderResult.correct ? 'ok' : 'bad'}`, text: `${ordered ? 'Order' : 'Toppings'} ${orderResult.correct ? '✓' : '✗'}` }),
         el('span', { class: `rchip ${amountsOk ? 'ok' : 'bad'}`, text: `Portions ${right}/${portions.length}` })),
       decoys.length ? el('p', { class: 'missing' }, el('strong', { text: "Doesn't go on: " }), decoys.map((d) => d.name).join(', ')) : null,
       buildView(data, pizza, size, { marks }),
-      pizzaInfo(pizza, { facts: false }));
+      pizzaInfo(pizza, { facts: false })]);
     ctx.done(correct, { portions });
     ctx.footer.append(ctx.nextButton());
     root.scrollIntoView({ block: 'start' });

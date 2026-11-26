@@ -1,0 +1,97 @@
+# Sends quiz notifications to your phone with Web Push.
+#
+# The push carries NO build data: just "quiz" or "summary" plus generic fallback text.
+# Your phone picks the actual question from its own copy of builds.json.
+#
+# Times live in docs/notify-schedule.json (UK time; GMT/BST handled automatically).
+# Secrets (Settings -> Secrets and variables -> Actions):
+#   VAPID_PRIVATE_KEY   required
+#   PUSH_SUBSCRIPTION   required (copy it from the app: Settings -> Notifications)
+#   VAPID_SUBJECT       optional, e.g. mailto:you@example.com (defaults to the app's address)
+name: Quiz notifications
+
+on:
+  schedule:
+    # Every hour at :17. GitHub's scheduler is busy on the hour and can run late, so avoid :00.
+    # The script only sends when the UK hour matches a slot.
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      type:
+        description: Which notification to send now
+        type: choice
+        options: [quiz, summary]
+        default: quiz
+
+permissions:
+  contents: read
+  # Keepalive: lets the run re-enable this workflow daily, so GitHub doesn't switch the
+  # schedule off after 60 days without repo activity.
+  actions: write
+
+concurrency:
+  group: quiz-notify
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            notifier
+            docs
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Is a notification due?
+        id: slot
+        run: node notifier/send.mjs check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TYPE: ${{ inputs.type }}
+
+      # Avoid double sends: each slot (date + hour) is remembered in the Actions cache.
+      - name: Already sent for this slot?
+        id: sent
+        if: steps.slot.outputs.send == 'true' && github.event_name == 'schedule'
+        uses: actions/cache/restore@v4
+        with:
+          path: .notify-sent
+          key: ${{ steps.slot.outputs.slot_key }}
+          lookup-only: true
+
+      - name: Install web-push
+        if: steps.slot.outputs.send == 'true' && steps.sent.outputs.cache-hit != 'true'
+        run: npm ci --prefix notifier --no-audit --no-fund
+
+      - name: Send the notification
+        if: steps.slot.outputs.send == 'true' && steps.sent.outputs.cache-hit != 'true'
+        run: node notifier/send.mjs send
+        env:
+          TYPE: ${{ steps.slot.outputs.type }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          PUSH_SUBSCRIPTION: ${{ secrets.PUSH_SUBSCRIPTION }}
+          APP_URL: ${{ vars.APP_URL }}
+
+      - name: Remember this slot was sent
+        if: steps.slot.outputs.send == 'true' && github.event_name == 'schedule' && steps.sent.outputs.cache-hit != 'true'
+        run: mkdir -p .notify-sent && date -u > .notify-sent/sent
+
+      - name: Save the sent marker
+        if: steps.slot.outputs.send == 'true' && github.event_name == 'schedule' && steps.sent.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .notify-sent
+          key: ${{ steps.slot.outputs.slot_key }}
+
+      - name: Keepalive (once a day)
+        if: always() && github.event_name == 'schedule'
+        run: node notifier/send.mjs keepalive
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
