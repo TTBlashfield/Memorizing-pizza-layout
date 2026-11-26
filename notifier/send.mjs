@@ -86,6 +86,13 @@ function check() {
     output('slot_key', `manual-${Date.now()}`);
     return;
   }
+  // Not set up yet (no secrets): skip quietly instead of failing (and emailing) every slot.
+  // A manual run still fails with a clear message, and an expired subscription still fails.
+  if (!(process.env.PUSH_SUBSCRIPTION || '').trim() || process.env.HAS_VAPID_KEY !== 'true') {
+    console.log('::notice::Notifications are not set up yet (VAPID_PRIVATE_KEY and PUSH_SUBSCRIPTION secrets). Skipping.');
+    output('send', 'false');
+    return;
+  }
   const { schedule, source } = loadSchedule(process.env.PUSH_SUBSCRIPTION || '');
   const slot = findDueSlot(new Date(), schedule);
   console.log(`Schedule from ${source}: ${describeSchedule(schedule)}`);
