@@ -84,7 +84,7 @@ export function validateBuilds(obj) {
   if (obj.toppingCodes === undefined) {
     warn('No "toppingCodes" found, so the topping-code quiz will be empty.');
   } else if (!isObj(obj.toppingCodes)) {
-    err('"toppingCodes" must map codes to names, like { "K": "Bacon" }.');
+    err('"toppingCodes" must map codes to names, like { "X": "Pizza sauce" }.');
   } else {
     for (const [code, name] of Object.entries(obj.toppingCodes)) {
       if (isStr(code) && isStr(name)) toppingCodes[code] = name;

@@ -7,7 +7,7 @@ export const toppingKey = (layer) => (layer.code ? `c:${layer.code}` : `n:${base
 
 /**
  * Like toppingKey, but a layer with no code joins the coded topping with the same name
- * (e.g. a codeless "Tandoori chicken" groups with the "D Tandoori chicken").
+ * (e.g. a codeless "Pepperoni" groups with the coded "P Pepperoni").
  */
 export function makeKeyer(data) {
   const codesByName = new Map();
