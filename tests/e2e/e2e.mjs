@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { serve } from '../../scripts/serve.mjs';
 import { validateBuilds, buildOrder, formatAmount, formatNum, isExtraCheese, steps, shortSizeName } from '../../docs/js/data.js';
 import { countFor } from '../../docs/js/questions.js';
+import { quizGroups, sharedSections } from '../../docs/js/groups.js';
 
 const require = createRequire(import.meta.url);
 const { webkit, chromium, devices } = require('playwright');
@@ -75,6 +76,10 @@ function typeValue(key) {
 function multiRight(key) {
   if (key === 'extracheese') return data.pizzas.filter((x) => x.layers.some((l) => isExtraCheese(l))).map((x) => x.name);
   if (key === 'postbake-which') return data.pizzas.filter((x) => x.layers.some((l) => l.stage === 'postbake')).map((x) => x.name);
+  if (key.startsWith('has:')) {
+    const g = quizGroups(data).find((x) => x.key === key.slice('has:'.length));
+    return g.members.map((m) => pizza(m.pizzaId).name);
+  }
   if (key.startsWith('range-sizes:')) {
     const r = key.slice('range-sizes:'.length);
     return data.pizzas.find((x) => x.range === r).sizes.map((k) => shortSizeName(data, k));
@@ -360,6 +365,24 @@ async function run() {
       await shot('11-pizza-afterbake');
     }
     log('browse search → pizza page with size switcher, flags and "After the bake"');
+
+    // Shared toppings view: pizzas side by side by what they share.
+    await page.goto(`${srv.url}#/browse`);
+    await page.fill('.search', '');
+    await page.getByRole('tab', { name: 'Shared toppings' }).click();
+    const sections = sharedSections(data);
+    await page.locator('.share-card').first().waitFor();
+    if (sections.shared.length) {
+      const g = sections.shared[0];
+      const card = page.locator('.share-card', { has: page.locator('.share-title', { hasText: g.title }) }).first();
+      assert.equal(await card.locator('.row').count(), g.members.length, `${g.title}: all its pizzas listed`);
+    }
+    await shot('11b-shared');
+    await page.reload();
+    await page.locator('.share-card').first().waitFor();
+    assert.equal(await page.getByRole('tab', { name: 'Shared toppings' }).getAttribute('aria-selected'), 'true', 'view remembered');
+    await page.getByRole('tab', { name: 'By range' }).click();
+    log(`browse "Shared toppings": ${sections.base.length} sauce/cheese groups, ${sections.shared.length} shared toppings, ${sections.unique.length} one-pizza toppings`);
 
     // Settings: count, notifications status, export.
     await page.goto(`${srv.url}#/settings`);

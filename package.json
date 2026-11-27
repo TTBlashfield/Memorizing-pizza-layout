@@ -1,6 +1,6 @@
 {
   "name": "makeline-trainer",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "Installable offline study app (PWA) for memorising pizza builds. No build data is included.",
   "type": "module",

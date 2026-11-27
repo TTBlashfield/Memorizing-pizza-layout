@@ -21,6 +21,10 @@ your progress. Push messages carry no build data either: your phone picks the qu
   and **Weak spots**.
 - **Browse**: search, pizza pages with a size switcher, numbered build steps, "After the bake",
   base, placement, notes, facts and ⚠ flags.
+- **Shared toppings** (Browse): pizzas side by side by what they have in common: a different
+  sauce or cheese, extra cheese on top, something after the bake, each topping on more than one
+  pizza (with per-slice counts for the size you pick, highest first) and toppings that are only
+  on one pizza. Matching "Which of these have …?" questions are in Placement & rules.
 - **Modes**: Flashcards · Build it (tap the order, then the counts) · Per slice & counts ·
   Codes (both ways) · Placement & rules (what goes on next, odd one out, placement both ways,
   slices per size, drizzles before or after the bake, what goes on after the bake, extra

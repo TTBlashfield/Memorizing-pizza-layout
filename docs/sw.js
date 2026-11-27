@@ -7,7 +7,7 @@
  */
 'use strict';
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const SHELL_PREFIX = 'makeline-shell-';
 const SHELL_CACHE = SHELL_PREFIX + VERSION;
 
@@ -23,6 +23,7 @@ const SHELL_FILES = [
   'js/data.js',
   'js/db.js',
   'js/distractors.js',
+  'js/groups.js',
   'js/notify.js',
   'js/order.js',
   'js/questions.js',

@@ -7,6 +7,7 @@ import {
   rangesIn, shortSizeName, sizesIn, steps, unitWord,
 } from './data.js';
 import { numericOptions, textOptions } from './distractors.js';
+import { quizGroups } from './groups.js';
 import { isNum, sample, shuffle } from './util.js';
 
 export const MODES = [
@@ -145,6 +146,14 @@ export function buildItems(data, filters) {
 
   if (pizzas.length >= 2 && pizzas.some((p) => p.layers.some(isExtraCheese))) {
     add({ key: 'extracheese', mode: 'rules', kind: 'extracheese' });
+  }
+
+  // "Which of these have X?" for toppings shared by a few pizzas (learn them as a group).
+  if (pizzas.length >= 3) {
+    for (const g of quizGroups(data)) {
+      const inRange = g.members.filter((m) => ranges.has(pizzaById(data, m.pizzaId).range)).length;
+      if (inRange >= 1 && inRange < pizzas.length) add({ key: `has:${g.key}`, mode: 'rules', kind: 'has', group: g.key });
+    }
   }
 
   if (pizzas.some(hasPostbake) && pizzas.some((p) => !hasPostbake(p))) {
@@ -504,6 +513,24 @@ export function makeQuestion(item, data, ctx = {}) {
         kind: 'multi', context: { label: 'Extra cheese' }, prompt: 'Which of these get extra cheese on top?',
         options: shown.map((p) => ({ id: p.id, label: p.name, code: p.code, correct: yes.includes(p) })),
         notes: [], flags: [],
+      };
+    }
+
+    case 'has': {
+      const g = quizGroups(data).find((x) => x.key === item.group);
+      if (!g) return null;
+      const filters = ctx.filters || { ranges: rangesIn(data) };
+      const pool = data.pizzas.filter((p) => filters.ranges.includes(p.range));
+      const ids = new Set(g.members.map((m) => m.pizzaId));
+      const yes = pool.filter((p) => ids.has(p.id));
+      const no = pool.filter((p) => !ids.has(p.id));
+      if (!yes.length || !no.length) return null;
+      const shownYes = sample(yes, 6, rng);
+      const shown = shuffle([...shownYes, ...sample(no, Math.max(2, Math.min(no.length, 10 - shownYes.length)), rng)], rng);
+      return {
+        kind: 'multi', context: { label: 'Shared toppings' }, prompt: `Which of these have ${g.title}?`,
+        options: shown.map((p) => ({ id: p.id, label: p.name, code: p.code, correct: ids.has(p.id) })),
+        notes: [`${g.title}${g.code ? ` (${g.code})` : ''} goes on: ${yes.map((p) => p.name).join(', ')}.`], flags: [],
       };
     }
 
