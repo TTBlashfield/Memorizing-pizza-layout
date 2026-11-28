@@ -109,8 +109,16 @@ export function validateBuilds(obj) {
       else ids.add(p.id);
       if (!isStr(p.name)) err(`${where} needs a "name".`);
       if (!isStr(p.code)) err(`${where} needs a "code".`);
+      // Limited-time pizzas (e.g. range "Christmas") say when they end: "limitedUntil": "2027-01-03".
+      let limitedUntil = null;
+      if (p.limitedUntil !== undefined && p.limitedUntil !== null) {
+        if (isIsoDate(p.limitedUntil)) limitedUntil = p.limitedUntil;
+        else err(`${where}: "limitedUntil" must be a date like "2027-01-03".`);
+      }
       if (!isStr(p.range)) err(`${where} needs a "range".`);
-      else if (!RANGE_ORDER.includes(p.range)) warn(`${where}: range "${p.range}" isn't one of ${RANGE_ORDER.join(', ')}. It will be listed last.`);
+      else if (!RANGE_ORDER.includes(p.range) && !limitedUntil && p.limitedUntil === undefined) {
+        warn(`${where}: range "${p.range}" isn't one of ${RANGE_ORDER.join(', ')}. It will be listed last.`);
+      }
 
       let psizes = [];
       if (!Array.isArray(p.sizes) || p.sizes.length === 0) {
@@ -189,7 +197,7 @@ export function validateBuilds(obj) {
 
       if (errors.length === before) {
         pizzas.push({
-          id: p.id, name: p.name, code: p.code, range: p.range, sizes: psizes,
+          id: p.id, name: p.name, code: p.code, range: p.range, sizes: psizes, limitedUntil,
           orderMatters, base, placement, facts, layers,
         });
       }
@@ -261,8 +269,58 @@ export function sortRanges(ranges) {
   });
 }
 
+/** Ranges in the file: the usual ones first, then any others, then limited-time ones. */
 export function rangesIn(data) {
-  return sortRanges([...new Set(data.pizzas.map((p) => p.range))]);
+  const all = sortRanges([...new Set(data.pizzas.map((p) => p.range))]);
+  const limited = new Set(all.filter((r) => isLimitedRange(data, r)));
+  return [...all.filter((r) => !limited.has(r)), ...all.filter((r) => limited.has(r))];
+}
+
+// ---------- limited-time pizzas ----------
+
+export function isIsoDate(s) {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, m, d] = s.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+/** Today's local date as "YYYY-MM-DD". */
+export function isoToday(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+export const isLimited = (pizza) => !!pizza.limitedUntil;
+
+/** A limited pizza is available up to and including its last day. */
+export const hasEnded = (pizza, today = isoToday()) => !!pizza.limitedUntil && today > pizza.limitedUntil;
+
+/** A range is limited when every pizza in it is. */
+export function isLimitedRange(data, range) {
+  const ps = data.pizzas.filter((p) => p.range === range);
+  return ps.length > 0 && ps.every(isLimited);
+}
+
+/** The file without limited pizzas that have ended (what quizzes and notifications use). */
+export function activeData(data, today = isoToday()) {
+  if (!data.pizzas.some((p) => hasEnded(p, today))) return data;
+  return { ...data, pizzas: data.pizzas.filter((p) => !hasEnded(p, today)) };
+}
+
+/** "2027-01-03" -> "3 Jan 2027". */
+export function formatDay(iso) {
+  if (!isIsoDate(iso)) return iso;
+  const [y, m, d] = iso.split('-').map(Number);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${d} ${months[m - 1]} ${y}`;
+}
+
+/** "until 3 Jan 2027" / "ended 3 Jan 2027" for a limited range, else null. */
+export function limitedLabel(data, range, today = isoToday()) {
+  if (!isLimitedRange(data, range)) return null;
+  const last = data.pizzas.filter((p) => p.range === range).map((p) => p.limitedUntil).sort().pop();
+  return last < today ? `ended ${formatDay(last)}` : `until ${formatDay(last)}`;
 }
 
 /** Size keys that at least one pizza uses, in P S M L ONE order. */

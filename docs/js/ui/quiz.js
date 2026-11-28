@@ -94,7 +94,7 @@ function runSession(cfg) {
 }
 
 function show(s) {
-  const data = getData();
+  const data = state.activeData() || getData();
   const entry = s.queue[s.pos];
   if (!entry) { summary(s); return; }
   const known = getProgress()[entry.item.key];

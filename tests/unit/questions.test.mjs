@@ -329,3 +329,25 @@ test('which sizes does a range come in', () => {
   assert.deepEqual(q.options.filter((o) => o.correct).map((o) => o.id), ['S', 'M', 'L']);
   assert.equal(q.options.length, 5);
 });
+
+test('ended limited-time pizzas are not quizzed; current ones are', async () => {
+  const { activeData } = await import('../../docs/js/data.js');
+  const d = fixture();
+  d.pizzas.push({
+    id: 'X1', name: 'Test Festive', code: 'X1', range: 'Christmas', limitedUntil: '2027-01-03',
+    sizes: ['M'], orderMatters: true, base: null, placement: null, facts: [],
+    layers: [
+      { seq: 1, code: 'X', name: 'Pizza sauce', unit: 'g', amounts: { M: 1 }, stage: 'prebake' },
+      { seq: 2, code: 'C', name: 'Cheese', unit: 'g', amounts: { M: 1 }, stage: 'prebake' },
+    ],
+  });
+  const full = validateBuilds(d).data;
+  const during = activeData(full, '2026-12-20');
+  const after = activeData(full, '2027-01-10');
+  const keysDuring = buildItems(during, effectiveFilters(during, {})).map((i) => i.key);
+  const keysAfter = buildItems(after, effectiveFilters(after, {})).map((i) => i.key);
+  assert.ok(keysDuring.includes('order:X1:M'));
+  assert.ok(effectiveFilters(during, {}).ranges.includes('Christmas'));
+  assert.ok(!keysAfter.some((k) => k.includes('X1')));
+  assert.ok(!effectiveFilters(after, {}).ranges.includes('Christmas'));
+});

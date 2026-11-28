@@ -42,6 +42,18 @@ your progress. Push messages carry no build data either: your phone picks the qu
   "3 more?".
 - **Settings**: re-import, export/import/reset progress, notifications, check for updates.
 
+## Limited-time pizzas (e.g. Christmas)
+
+Give a pizza its own `range` (that's the section name) and the last day it's sold:
+
+```json
+{ "id": "XM1", "name": "…", "code": "…", "range": "Christmas", "limitedUntil": "2027-01-03", "sizes": ["S", "M", "L"], … }
+```
+
+Limited-time sections come after the usual ranges. They have their own filter chip on Home
+and show "Limited time · until 3 Jan 2027" in Browse. After that day they drop out of quizzes
+and notifications on their own, and Browse marks them "Ended".
+
 ## Quiz notifications
 
 iPhone only allows web push for Home Screen apps (iOS 16.4+), and web apps can't schedule

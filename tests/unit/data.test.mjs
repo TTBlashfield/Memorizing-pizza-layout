@@ -152,3 +152,56 @@ test('drizzle and extra-cheese detection, sizes and ranges', () => {
   assert.deepEqual(sizesIn(data), ['P', 'S', 'M', 'L', 'ONE']);
   assert.deepEqual(rangesIn(data), ['Classics', 'Italianos', 'Cheeky Little']);
 });
+
+// ---------- limited-time pizzas ----------
+import { isIsoDate, isoToday, hasEnded, activeData, isLimitedRange, limitedLabel, formatDay } from '../../docs/js/data.js';
+
+function withChristmas(until = '2027-01-03') {
+  const d = fixture();
+  d.pizzas.push({
+    id: 'X1', name: 'Test Festive', code: 'X1', range: 'Christmas', limitedUntil: until,
+    sizes: ['M', 'L'], orderMatters: true, base: null, placement: null, facts: [],
+    layers: [
+      { seq: 1, code: 'X', name: 'Pizza sauce', unit: 'g', amounts: { M: 1, L: 2 }, stage: 'prebake' },
+      { seq: 2, code: 'C', name: 'Cheese', unit: 'g', amounts: { M: 1, L: 2 }, stage: 'prebake' },
+    ],
+  });
+  return d;
+}
+
+test('limited-time pizzas: a dated range, listed after the usual ones, no "unknown range" warning', () => {
+  const res = validateBuilds(withChristmas());
+  assert.equal(res.ok, true, res.errors.join('\n'));
+  assert.ok(!res.warnings.some((w) => /Christmas/.test(w)));
+  assert.equal(res.data.pizzas[3].limitedUntil, '2027-01-03');
+  assert.equal(res.data.pizzas[0].limitedUntil, null);
+  assert.deepEqual(rangesIn(res.data), ['Classics', 'Italianos', 'Cheeky Little', 'Christmas']);
+  assert.equal(isLimitedRange(res.data, 'Christmas'), true);
+  assert.equal(isLimitedRange(res.data, 'Classics'), false);
+});
+
+test('limitedUntil must be a real date', () => {
+  for (const bad of ['3 Jan', '2027-02-30', '2027-1-3', 20270103]) {
+    const res = validateBuilds(withChristmas(bad));
+    assert.equal(res.ok, false, String(bad));
+    assert.match(res.errors[0], /limitedUntil/);
+  }
+  assert.equal(isIsoDate('2028-02-29'), true);
+});
+
+test('a limited pizza is on until the end of its last day, then drops out of the active list', () => {
+  const data = validateBuilds(withChristmas()).data;
+  const x = data.pizzas[3];
+  assert.equal(hasEnded(x, '2027-01-03'), false);
+  assert.equal(hasEnded(x, '2027-01-04'), true);
+  assert.equal(hasEnded(data.pizzas[0], '2099-01-01'), false, 'regular pizzas never end');
+  assert.equal(activeData(data, '2026-12-25'), data, 'nothing ended: same object');
+  const after = activeData(data, '2027-01-04');
+  assert.deepEqual(after.pizzas.map((p) => p.id), ['T1', 'T2', 'T3']);
+  assert.equal(data.pizzas.length, 4, 'the original is untouched');
+  assert.equal(limitedLabel(data, 'Christmas', '2026-12-25'), 'until 3 Jan 2027');
+  assert.equal(limitedLabel(data, 'Christmas', '2027-01-04'), 'ended 3 Jan 2027');
+  assert.equal(limitedLabel(data, 'Classics', '2026-12-25'), null);
+  assert.equal(formatDay('2027-01-03'), '3 Jan 2027');
+  assert.match(isoToday(new Date(2026, 10, 28)), /^2026-11-28$/);
+});

@@ -46,7 +46,7 @@ function scheduleSnapshot(delay = 1200) {
 
 async function refreshSnapshot() {
   try {
-    const data = getData();
+    const data = state.activeData();
     const previous = await kvGet(SNAPSHOT_KEY).catch(() => null);
     const snap = buildSnapshot({
       data, items: state.items(), progress: getProgress(), statsDays: getStats().days,

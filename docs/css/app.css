@@ -506,3 +506,9 @@ code { font-family: var(--mono); font-size: 0.9em; background: var(--surface-2);
 .share-title { display: flex; align-items: center; gap: 8px; margin: 0 4px 6px; font-size: 1rem; }
 .val { font-weight: 800; font-size: 0.95rem; font-variant-numeric: tabular-nums; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); }
 .val-perslice { background: var(--accent-soft); color: var(--accent); }
+
+/* limited-time pizzas */
+.chip-limited { border-style: dashed; flex-direction: column; gap: 0; line-height: 1.1; padding-top: 4px; padding-bottom: 4px; }
+.chip-sub { font-size: 0.7rem; font-weight: 600; color: var(--muted); }
+.limited-tag { font-size: 0.72rem; font-weight: 700; text-transform: none; letter-spacing: 0; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.ended { font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }

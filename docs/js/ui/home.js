@@ -1,6 +1,6 @@
 // Home: today's progress, filters, mode buttons.
 import { getData, getProgress, getStats, getSettings, updateSettings } from '../store.js';
-import { rangesIn, sizesIn, shortSizeName } from '../data.js';
+import { rangesIn, sizesIn, shortSizeName, isLimitedRange, limitedLabel } from '../data.js';
 import { modesFor } from '../questions.js';
 import { summarize, weakSpots, computeStreak, dayIndex } from '../srs.js';
 import { percent, plural } from '../util.js';
@@ -49,7 +49,7 @@ export function renderHome() {
   const body = el('div', { class: 'home' },
     tiles,
     installHint(),
-    filtersCard(data),
+    filtersCard(state.activeData() || data),
     el('h2', { class: 'section-title', text: 'Practise' }),
     el('div', { class: 'modes' }, modeButtons, weakBtn));
 
@@ -82,12 +82,13 @@ function filtersCard(data) {
     renderHome();
   };
   return el('div', { class: 'card filters' },
+    // (ranges/sizes come from the active data: ended limited-time pizzas are gone)
     el('div', { class: 'filter-row' },
       el('span', { class: 'filter-label', text: 'Ranges' }),
       el('div', { class: 'chips' }, ranges.map((r) => el('button', {
-        type: 'button', class: `chip${f.ranges.includes(r) ? ' on' : ''}`, 'aria-pressed': String(f.ranges.includes(r)),
-        onclick: () => toggle('ranges', r, ranges),
-      }, r)))),
+        type: 'button', class: `chip${f.ranges.includes(r) ? ' on' : ''}${isLimitedRange(data, r) ? ' chip-limited' : ''}`, 'aria-pressed': String(f.ranges.includes(r)),
+        title: limitedLabel(data, r) || null, onclick: () => toggle('ranges', r, ranges),
+      }, r, isLimitedRange(data, r) ? el('span', { class: 'chip-sub', text: limitedLabel(data, r) }) : null)))),
     el('div', { class: 'filter-row' },
       el('span', { class: 'filter-label', text: 'Sizes' }),
       el('div', { class: 'chips' }, sizes.map((s) => el('button', {

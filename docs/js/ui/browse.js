@@ -1,6 +1,6 @@
 // Browse: searchable list grouped by range or by shared toppings, and the pizza page.
 import { getData, getSettings, updateSettings } from '../store.js';
-import { rangesIn, normName, shortSizeName, sizesIn, formatNum, unitWord } from '../data.js';
+import { rangesIn, normName, shortSizeName, sizesIn, formatNum, unitWord, limitedLabel, hasEnded, isLimited, formatDay } from '../data.js';
 import { pizzaById } from '../questions.js';
 import { sharedSections, groupValue } from '../groups.js';
 import * as state from '../state.js';
@@ -33,7 +33,7 @@ export function renderBrowse() {
   const draw = () => {
     lastQuery = input.value;
     clear(list);
-    if (view === 'shared') drawShared(data, list, normName(input.value), draw);
+    if (view === 'shared') drawShared(state.activeData() || data, list, normName(input.value), draw);
     else drawRanges(data, list, normName(input.value), input.value);
   };
   input.addEventListener('input', draw);
@@ -50,6 +50,7 @@ function pizzaRow(data, p, extra = null, size = null) {
         el('span', { class: 'row-name', text: p.name }),
         extra || el('span', { class: 'row-sizes' }, p.sizes.map((s) => sizeBadge(data, s)))),
       codePill(p.code),
+      hasEnded(p) ? el('span', { class: 'ended', text: 'Ended' }) : null,
       p.layers.some((l) => l.flag) ? el('span', { class: 'flag-dot', title: 'Has something to check', text: '⚠' }) : null));
 }
 
@@ -61,7 +62,8 @@ function drawRanges(data, list, q, raw) {
     if (!pizzas.length) continue;
     shown += pizzas.length;
     list.append(el('section', { class: 'group' },
-      el('h2', { class: 'group-title' }, range, el('span', { class: 'count', text: String(pizzas.length) })),
+      el('h2', { class: 'group-title' }, range, el('span', { class: 'count', text: String(pizzas.length) }),
+        limitedLabel(data, range) ? el('span', { class: 'limited-tag', text: `Limited time · ${limitedLabel(data, range)}` }) : null),
       el('ul', { class: 'rows' }, pizzas.map((p) => pizzaRow(data, p)))));
   }
   if (!shown) list.append(el('p', { class: 'empty', text: `Nothing matches “${raw}”.` }));
@@ -166,7 +168,8 @@ export function renderPizza(id, sizeArg) {
   const body = el('div', { class: 'pizza' },
     el('div', { class: 'pizza-head' },
       el('h2', { class: 'pizza-name', text: pizza.name }),
-      el('div', { class: 'pizza-meta' }, codePill(pizza.code), el('span', { class: 'muted', text: pizza.range }))),
+      el('div', { class: 'pizza-meta' }, codePill(pizza.code), el('span', { class: 'muted', text: pizza.range }),
+        isLimited(pizza) ? el('span', { class: hasEnded(pizza) ? 'ended' : 'limited-tag', text: hasEnded(pizza) ? `Ended ${formatDay(pizza.limitedUntil)}` : `Limited time · until ${formatDay(pizza.limitedUntil)}` }) : null)),
     pizza.sizes.length > 1 ? switcher : el('div', { class: 'seg seg-one' }, sizeBadge(data, size, { long: true })),
     holder,
     pizzaInfo(pizza));
